@@ -79,12 +79,13 @@ class Product(models.Model):
     weight_kg = models.DecimalField(max_digits=8, decimal_places=3, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     active = models.BooleanField(default=True)
+    image = models.ImageField(upload_to="products/", blank=True, null=True)  # новое поле
     categories = models.ManyToManyField(Category, related_name="products", blank=True)
     suppliers = models.ManyToManyField(Supplier, through="ProductSupplier", related_name="products")
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
-    
+
     class Meta:
         db_table = "elshop_product"
 

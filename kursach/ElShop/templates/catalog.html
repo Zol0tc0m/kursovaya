@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Каталог{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Каталог товаров</h2>
+    <!-- Кнопка вызова панели фильтров -->
+    <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterPanel" aria-controls="filterPanel">
+        Фильтры
+    </button>
+</div>
+
+<!-- Offcanvas фильтры -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="filterPanel" aria-labelledby="filterPanelLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="filterPanelLabel">Фильтры</h5>
+    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form method="get" id="filterForm">
+        <div class="mb-3">
+            <label class="form-label">Категория</label>
+            <select class="form-select" name="category" id="categorySelect">
+                <option value="">Все</option>
+                {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if selected_category|add:'' == cat.id|stringformat:"s" %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Мин. цена</label>
+            <input type="number" class="form-control" step="0.01" name="min_price" value="{{ min_price }}" id="minPrice">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Макс. цена</label>
+            <input type="number" class="form-control" step="0.01" name="max_price" value="{{ max_price }}" id="maxPrice">
+        </div>
+        <button type="submit" class="btn btn-success w-100">Применить</button>
+    </form>
+  </div>
+</div>
+
+<!-- Сетка товаров -->
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for product in products %}
+        <div class="col">
+            <div class="card h-100 product-card">
+                <img src="https://via.placeholder.com/300x200?text={{ product.name|urlencode }}" class="card-img-top" alt="{{ product.name }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ product.name }}</h5>
+                    <p class="card-text text-success fw-bold">{{ product.base_price|floatformat:2 }} €</p>
+                    <form method="post" action="{% url 'add_to_cart' product.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn-primary w-100">Добавить в корзину</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <p>Товары отсутствуют.</p>
+    {% endfor %}
+</div>
+
+<!-- Пагинация с сохранением фильтров -->
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if min_price %}&min_price={{ min_price }}{% endif %}{% if max_price %}&max_price={{ max_price }}{% endif %}">« Назад</a>
+            </li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if min_price %}&min_price={{ min_price }}{% endif %}{% if max_price %}&max_price={{ max_price }}{% endif %}">Вперед »</a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+
+<!-- Скрипт для автозакрытия Offcanvas -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const filterForm = document.getElementById("filterForm");
+    const offcanvasElement = document.getElementById("filterPanel");
+    const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasElement);
+
+    filterForm.addEventListener("submit", function() {
+        offcanvas.hide();
+    });
+});
+</script>
+
+{% endblock %}

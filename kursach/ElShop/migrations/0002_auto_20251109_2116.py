@@ -28,21 +28,19 @@ GROUP BY oi.product_id, p.sku, p.name;
 
 -- === Триггер аудита ===
 
-CREATE OR REPLACE FUNCTION ElShop_fn_audit_log() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION elshop_fn_audit_log()
+RETURNS TRIGGER AS $$
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    INSERT INTO ElShop_audit_log(table_name, operation, row_data, changed_by)
-    VALUES (TG_TABLE_NAME, TG_OP, to_jsonb(OLD), current_setting('app.current_user', true));
-    RETURN OLD;
-  ELSIF TG_OP = 'UPDATE' THEN
-    INSERT INTO ElShop_audit_log(table_name, operation, row_data, changed_by)
-    VALUES (TG_TABLE_NAME, TG_OP, jsonb_build_object('old', to_jsonb(OLD), 'new', to_jsonb(NEW)), current_setting('app.current_user', true));
+    INSERT INTO "ElShop_audit_log"(
+        table_name, operation, row_data, changed_by, changed_at
+    ) VALUES (
+        TG_TABLE_NAME,
+        TG_OP,
+        to_jsonb(NEW),
+        current_setting('app.current_user', true),
+        now()  -- <--- явно добавляем текущую дату
+    );
     RETURN NEW;
-  ELSIF TG_OP = 'INSERT' THEN
-    INSERT INTO ElShop_audit_log(table_name, operation, row_data, changed_by)
-    VALUES (TG_TABLE_NAME, TG_OP, to_jsonb(NEW), current_setting('app.current_user', true));
-    RETURN NEW;
-  END IF;
 END;
 $$ LANGUAGE plpgsql;
 

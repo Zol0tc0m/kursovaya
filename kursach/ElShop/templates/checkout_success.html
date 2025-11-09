@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Заказ оформлен{% endblock %}
+
+{% block content %}
+<div class="alert alert-success" role="alert">
+    Спасибо! Ваш заказ успешно оформлен.
+</div>
+<a href="{% url 'catalog' %}" class="btn btn-primary">Вернуться в каталог</a>
+{% endblock %}

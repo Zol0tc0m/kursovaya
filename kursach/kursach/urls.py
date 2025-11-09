@@ -15,9 +15,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from ElShop.views import CustomerViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet, PaymentViewSet
+from ElShop.views import CustomerViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet, PaymentViewSet, ProductListView, AddToCartView, CartView, CheckoutView, CheckoutSuccessView
 
 router = DefaultRouter()
 router.register(r"customers", CustomerViewSet)
@@ -29,4 +31,12 @@ router.register(r"payments", PaymentViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/", include(router.urls)),
+    path("", ProductListView.as_view(), name="catalog"),
+    path("cart/", CartView.as_view(), name="cart"),
+    path("checkout/", CheckoutView.as_view(), name="checkout"),
+    path("checkout/success/", CheckoutSuccessView.as_view(), name="checkout_success"),
+    path("add-to-cart/<int:product_id>/", AddToCartView.as_view(), name="add_to_cart"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
