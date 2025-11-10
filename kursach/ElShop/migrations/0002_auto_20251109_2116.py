@@ -31,7 +31,7 @@ GROUP BY oi.product_id, p.sku, p.name;
 CREATE OR REPLACE FUNCTION elshop_fn_audit_log()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO "ElShop_audit_log"(
+    INSERT INTO ElShop_audit_log(
         table_name, operation, row_data, changed_by, changed_at
     ) VALUES (
         TG_TABLE_NAME,

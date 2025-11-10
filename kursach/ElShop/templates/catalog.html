@@ -44,10 +44,18 @@
 <div class="row row-cols-1 row-cols-md-3 g-4">
     {% for product in products %}
         <div class="col">
-            <div class="card h-100 product-card">
-                <img src="https://via.placeholder.com/300x200?text={{ product.name|urlencode }}" class="card-img-top" alt="{{ product.name }}">
+            <div class="card h-100 product-card shadow-sm">
+                {% if product.image %}
+                    <img src="{{ product.image.url }}" class="card-img-top" alt="{{ product.name }}">
+                {% else %}
+                    <img src="https://via.placeholder.com/300x200?text={{ product.name|urlencode }}" class="card-img-top" alt="{{ product.name }}">
+                {% endif %}
                 <div class="card-body">
-                    <h5 class="card-title">{{ product.name }}</h5>
+                    <h5 class="card-title">
+                        <a href="{% url 'product_detail' product.id %}" class="text-decoration-none text-dark">
+                            {{ product.name }}
+                        </a>
+                    </h5>
                     <p class="card-text text-success fw-bold">{{ product.base_price|floatformat:2 }} €</p>
                     <form method="post" action="{% url 'add_to_cart' product.id %}">
                         {% csrf_token %}

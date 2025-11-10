@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Аналитика{% endblock %}
+
+{% block content %}
+<h1>📊 Аналитика магазина</h1>
+
+<hr>
+
+<h2>📊 Продажи по категориям</h2>
+<canvas id="categoryChart"></canvas>
+
+<h2 class="mt-4">💰 Доход за последнюю неделю</h2>
+<canvas id="revenueChart"></canvas>
+
+<h2 class="mt-4">🥇 Топ-5 товаров</h2>
+<canvas id="topProductChart"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// --- Продажи по категориям (гистограмма) ---
+const categoryLabels = [{% for c in category_sales %}'{{ c.product__categories__name|default:"Без категории" }}',{% endfor %}];
+const categoryData = [{% for c in category_sales %}{{ c.total_sold|default:0 }},{% endfor %}];
+
+new Chart(document.getElementById('categoryChart'), {
+    type: 'bar',
+    data: {
+        labels: categoryLabels,
+        datasets: [{
+            label: 'Продано единиц',
+            data: categoryData,
+            backgroundColor: '#007bff'
+        }]
+    },
+    options: { responsive: true }
+});
+
+// --- Доход за последнюю неделю (линейный график) ---
+const revenueLabels = [{% for d in daily_revenue %}'{{ d.day }}',{% endfor %}];
+const revenueData = [{% for d in daily_revenue %}{{ d.total|default:0 }},{% endfor %}];
+
+new Chart(document.getElementById('revenueChart'), {
+    type: 'line',
+    data: {
+        labels: revenueLabels,
+        datasets: [{
+            label: 'Доход (₽)',
+            data: revenueData,
+            borderColor: 'green',
+            fill: false,
+            tension: 0.2
+        }]
+    },
+    options: { responsive: true }
+});
+
+// --- Топ-5 товаров (круговая диаграмма) ---
+const topLabels = [{% for p in top_products %}'{{ p.product__name }}',{% endfor %}];
+const topData = [{% for p in top_products %}{{ p.total_sold|default:0 }},{% endfor %}];
+
+new Chart(document.getElementById('topProductChart'), {
+    type: 'pie',
+    data: {
+        labels: topLabels,
+        datasets: [{
+            data: topData,
+            backgroundColor: [
+                '#007bff','#28a745','#ffc107','#dc3545','#6f42c1'
+            ]
+        }]
+    },
+    options: { responsive: true }
+});
+</script>
+{% endblock %}

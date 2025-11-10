@@ -5,32 +5,52 @@
 <h2 class="mb-4">Корзина</h2>
 
 {% if cart %}
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>Название</th>
-            <th>Цена</th>
-            <th>Количество</th>
-            <th>Сумма</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for pid, item in cart.items %}
-        <tr>
-            <td>{{ item.name }}</td>
-            <td>{{ item.price|floatformat:2 }} €</td>
-            <td>{{ item.quantity }}</td>
-            <td>{{ item.line_total|floatformat:2 }} €</td>
-        </tr>
-        {% endfor %}
-        <tr>
-            <td colspan="3" class="text-end fw-bold">Итого:</td>
-            <td class="fw-bold">{{ total|floatformat:2 }} €</td>
-        </tr>
-    </tbody>
-</table>
+<form method="post" action="{% url 'update_cart' %}">
+    {% csrf_token %}
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Название</th>
+                <th class="text-center">Цена</th>
+                <th class="text-center">Количество</th>
+                <th class="text-center">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pid, item in cart.items %}
+            <tr>
+                <td>{{ item.name }}</td>
+                <td class="text-center">{{ item.price|floatformat:2 }} €</td>
+                <td class="text-center" style="width: 120px;">
+                    <input type="number" name="quantity_{{ pid }}" value="{{ item.quantity }}" min="1" class="form-control text-center">
+                </td>
+                <td class="text-center">{{ item.line_total|floatformat:2 }} €</td>
+            </tr>
+            {% endfor %}
+            <tr class="table-secondary fw-bold">
+                <td colspan="3" class="text-end">Итого:</td>
+                <td class="text-center">{{ total|floatformat:2 }} €</td>
+            </tr>
+        </tbody>
+    </table>
 
-<a href="{% url 'checkout' %}" class="btn btn-success">Оформить заказ</a>
+    <div class="d-flex justify-content-between mt-3">
+        <a href="{% url 'catalog' %}" class="btn btn-secondary">← Продолжить покупки</a>
+        <div>
+            <button type="submit" class="btn btn-primary me-2">Обновить корзину</button>
+            <a href="{% url 'checkout' %}" class="btn btn-success me-2">Оформить заказ</a>
+        </div>
+    </div>
+</form>
+
+<!-- Форма очистки корзины вынесена за пределы основной формы -->
+<form method="post" action="{% url 'clear_cart' %}" class="mt-3">
+    {% csrf_token %}
+    <div class="d-flex justify-content-end">
+        <button type="submit" class="btn btn-danger">Очистить корзину</button>
+    </div>
+</form>
+
 {% else %}
 <p>Корзина пуста.</p>
 <a href="{% url 'catalog' %}" class="btn btn-primary">Вернуться в каталог</a>

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}История заказов{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">История заказов</h2>
+
+{% if orders %}
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Номер заказа</th>
+            <th>Дата</th>
+            <th>Статус</th>
+            <th>Сумма</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for order in orders %}
+        <tr>
+            <td>{{ order.id }}</td>
+            <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
+            <td>{{ order.get_status_display }}</td>
+            <td>{{ order.total|floatformat:2 }} €</td>
+            <td><a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-primary">Посмотреть</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Вы ещё не сделали ни одного заказа.</p>
+{% endif %}
+{% endblock %}

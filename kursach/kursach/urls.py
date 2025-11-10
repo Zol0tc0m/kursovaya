@@ -19,7 +19,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from ElShop.views import CustomerViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet, PaymentViewSet, ProductListView, AddToCartView, CartView, CheckoutView, CheckoutSuccessView
+from ElShop.views import CustomerViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet, PaymentViewSet, ProductListView, AddToCartView, CartView, CheckoutView, CheckoutSuccessView, ProductDetailView, register, clear_cart, update_cart, OrderHistoryView, OrderDetailView, ProfileView, analytics_view
+from django.contrib.auth import views as auth_views
 
 router = DefaultRouter()
 router.register(r"customers", CustomerViewSet)
@@ -36,6 +37,16 @@ urlpatterns = [
     path("checkout/", CheckoutView.as_view(), name="checkout"),
     path("checkout/success/", CheckoutSuccessView.as_view(), name="checkout_success"),
     path("add-to-cart/<int:product_id>/", AddToCartView.as_view(), name="add_to_cart"),
+    path('product/<int:pk>/', ProductDetailView.as_view(), name='product_detail'),
+    path('login/', auth_views.LoginView.as_view(template_name='auth/login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('register/', register, name='register'),
+    path('cart/update/', update_cart, name='update_cart'),
+    path('cart/clear/', clear_cart, name='clear_cart'),
+    path('orders/', OrderHistoryView.as_view(), name='order_history'),
+    path('orders/<int:order_id>/', OrderDetailView.as_view(), name='order_detail'),
+    path('profile/', ProfileView.as_view(), name='profile'),
+    path('analytics/', analytics_view, name='analytics'),
 ]
 
 if settings.DEBUG:

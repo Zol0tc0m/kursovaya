@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Заказ #{{ order.id }}{% endblock %}
+
+{% block content %}
+<h2>Заказ #{{ order.id }}</h2>
+<p>Дата: {{ order.created_at|date:"d.m.Y H:i" }}</p>
+<p>Статус: {{ order.get_status_display }}</p>
+<p>Сумма: {{ order.total|floatformat:2 }} €</p>
+
+<h4 class="mt-4">Товары:</h4>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Название</th>
+            <th>Цена</th>
+            <th>Количество</th>
+            <th>Сумма</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.product.name }}</td>
+            <td>{{ item.unit_price|floatformat:2 }} €</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ item.line_total|floatformat:2 }} €</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
