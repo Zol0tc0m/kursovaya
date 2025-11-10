@@ -192,3 +192,17 @@ class AuditLog(models.Model):
 
     class Meta:
         db_table = "elshop_audit_log"
+
+class UserSettings(models.Model):
+    THEME_CHOICES = [
+        ("light", "Светлая"),
+        ("dark", "Тёмная"),
+    ]
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="settings")
+    theme = models.CharField(max_length=10, choices=THEME_CHOICES, default="light")
+
+    def __str__(self):
+        return f"Настройки {self.user.username}"
+
+    class Meta:
+        db_table = "elshop_user_settings"

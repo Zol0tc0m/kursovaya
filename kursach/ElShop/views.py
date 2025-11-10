@@ -2,7 +2,7 @@ from django.shortcuts import redirect, render, get_object_or_404
 from rest_framework import viewsets
 from django.views import View
 from django.views.generic import ListView, DetailView
-from .models import Customer, Product, Order, OrderItem, Payment, Category, Address, CustomerProfile
+from .models import Customer, Product, Order, OrderItem, Payment, Category, Address, CustomerProfile, UserSettings
 from .serializers import (
     CustomerSerializer,
     ProductSerializer,
@@ -21,6 +21,10 @@ from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
+from django.contrib.admin.views.decorators import staff_member_required
+from django.http import HttpResponse
+import csv
+from django.http import JsonResponse
 
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
@@ -442,3 +446,128 @@ def analytics_view(request):
         'top_products': list(top_products),
     }
     return render(request, 'analytics.html', context)
+
+@staff_member_required
+def export_analytics_csv(request):
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    orders = Order.objects.all()
+    if start_date:
+        orders = orders.filter(created_at__date__gte=start_date)
+    if end_date:
+        orders = orders.filter(created_at__date__lte=end_date)
+
+    # Excel-friendly CSV (cp1251)
+    response = HttpResponse(content_type='text/csv; charset=cp1251')
+    response['Content-Disposition'] = 'attachment; filename="analytics_report.csv"'
+
+    writer = csv.writer(response, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+    # Заголовки (на русском)
+    writer.writerow([
+        "Дата заказа", "ID заказа", "Статус", "Покупатель",
+        "Сумма заказа", "Товар", "Количество", "Цена за единицу", "Сумма по товару"
+    ])
+
+    for order in orders:
+        for item in order.items.all():
+            writer.writerow([
+                order.created_at.strftime("%Y-%m-%d %H:%M"),
+                order.id,
+                order.status,
+                f"{order.customer.first_name} {order.customer.last_name}" if order.customer else "Аноним",
+                float(order.total),
+                item.product.name,
+                item.quantity,
+                float(item.unit_price),
+                float(item.line_total)
+            ])
+
+    return response
+
+def is_admin_or_manager(user):
+    return user.is_staff or user.groups.filter(name='Manager').exists()
+
+@user_passes_test(is_admin_or_manager)
+def export_products_csv(request):
+    """Экспорт всех товаров в CSV"""
+    response = HttpResponse(content_type='text/csv; charset=cp1251')
+    response['Content-Disposition'] = 'attachment; filename="products_export.csv"'
+
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow(['ID', 'Название', 'Описание', 'Цена', 'Категории'])
+
+    for product in Product.objects.all().prefetch_related('categories'):
+        categories = ', '.join(cat.name for cat in product.categories.all())
+        writer.writerow([
+            product.sku,
+            product.name,
+            product.description or '',
+            str(product.base_price).replace('.', ','),
+            categories
+        ])
+
+    return response
+
+
+@user_passes_test(is_admin_or_manager)
+def import_products_csv(request):
+    """Импорт товаров из CSV"""
+    if request.method == 'POST' and request.FILES.get('csv_file'):
+        csv_file = request.FILES['csv_file']
+        decoded_file = csv_file.read().decode('cp1251').splitlines()
+        reader = csv.DictReader(decoded_file, delimiter=';')
+
+        imported = 0
+        for row in reader:
+            name = (row.get('Название') or '').strip()
+            if not name:
+                continue  # пропускаем пустые строки
+
+            description = (row.get('Описание') or '').strip()
+            price_str = (row.get('Цена') or '0').strip().replace(',', '.')
+            try:
+                base_price = float(price_str)
+            except ValueError:
+                base_price = 0.0
+
+            # SKU — если не указан, создаём автоматически
+            sku = row.get('ID') or f"SKU_{name[:5].upper()}_{imported+1}"
+
+            product, created = Product.objects.get_or_create(sku=sku, defaults={
+                'name': name,
+                'description': description,
+                'base_price': base_price,
+            })
+
+            if not created:
+                product.name = name
+                product.description = description
+                product.base_price = base_price
+                product.save()
+
+            # Категории
+            cat_names = (row.get('Категории') or '').split(',')
+            product.categories.clear()
+            for cname in cat_names:
+                cname = cname.strip()
+                if cname:
+                    cat, _ = Category.objects.get_or_create(name=cname)
+                    product.categories.add(cat)
+
+            imported += 1
+
+        messages.success(request, f'✅ Импортировано {imported} товаров.')
+        return redirect('catalog')
+
+    messages.error(request, '❌ Файл не выбран или имеет неверный формат.')
+    return redirect('catalog')
+
+@login_required
+def toggle_theme(request):
+    settings, _ = UserSettings.objects.get_or_create(user=request.user)
+    new_theme = "dark" if settings.theme == "light" else "light"
+    settings.theme = new_theme
+    settings.save()
+    return JsonResponse({"theme": new_theme})

@@ -3,7 +3,9 @@
 
 {% block content %}
 <h1>📊 Аналитика магазина</h1>
-
+<a href="{% url 'export_analytics_csv' %}?start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-success ml-3">
+  ⬇ Экспорт CSV
+</a>
 <hr>
 
 <h2>📊 Продажи по категориям</h2>

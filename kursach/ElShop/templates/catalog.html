@@ -8,6 +8,17 @@
     <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterPanel" aria-controls="filterPanel">
         Фильтры
     </button>
+    {% if user.is_staff or user.groups.all.0.name == 'Manager' %}
+    <div class="mb-3">
+    <a href="{% url 'export_products' %}" class="btn btn-success">⬇ Экспорт CSV</a>
+
+    <form method="post" action="{% url 'import_products' %}" enctype="multipart/form-data" style="display:inline-block;">
+        {% csrf_token %}
+        <label for="csv_file" class="btn btn-primary mb-0">⬆ Импорт CSV</label>
+        <input type="file" name="csv_file" id="csv_file" style="display:none;" onchange="this.form.submit();">
+    </form>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Offcanvas фильтры -->

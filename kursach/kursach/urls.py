@@ -19,7 +19,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from ElShop.views import CustomerViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet, PaymentViewSet, ProductListView, AddToCartView, CartView, CheckoutView, CheckoutSuccessView, ProductDetailView, register, clear_cart, update_cart, OrderHistoryView, OrderDetailView, ProfileView, analytics_view
+from ElShop.views import CustomerViewSet, ProductViewSet, OrderViewSet, OrderItemViewSet, PaymentViewSet, ProductListView, AddToCartView, CartView, CheckoutView, CheckoutSuccessView, ProductDetailView, register, clear_cart, update_cart, OrderHistoryView, OrderDetailView, ProfileView, analytics_view, export_analytics_csv, import_products_csv, export_products_csv, toggle_theme
 from django.contrib.auth import views as auth_views
 
 router = DefaultRouter()
@@ -47,6 +47,10 @@ urlpatterns = [
     path('orders/<int:order_id>/', OrderDetailView.as_view(), name='order_detail'),
     path('profile/', ProfileView.as_view(), name='profile'),
     path('analytics/', analytics_view, name='analytics'),
+    path('analytics/export/', export_analytics_csv, name='export_analytics_csv'),
+    path('export-products/', export_products_csv, name='export_products'),
+    path('import-products/', import_products_csv, name='import_products'),
+    path("toggle-theme/", toggle_theme, name="toggle_theme"),
 ]
 
 if settings.DEBUG:
