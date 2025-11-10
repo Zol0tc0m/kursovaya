@@ -11,8 +11,9 @@ from .serializers import (
     PaymentSerializer,
 )
 from django import forms
-from django.db.models import Sum, F
-from datetime import timedelta, date
+from django.db.models import Sum
+from django.db import transaction, IntegrityError
+from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -175,38 +176,56 @@ class CheckoutView(LoginRequiredMixin, View):
         return render(request, self.template_name, {"cart": cart, "total": total})
 
     def post(self, request):
-        # Здесь можно создать Order и OrderItem из корзины
         cart = request.session.get("cart", {})
         if not cart:
+            messages.error(request, "Корзина пуста.")
             return redirect("catalog")
 
-        # Простейший пример: создаём заказ для первого пользователя (или анонимного)
-        from .models import Customer, Order, OrderItem
+        try:
+            with transaction.atomic():  # 👈 атомарный блок
+                customer = request.user.customer
 
-        customer = Customer.objects.first()  # TODO: заменить на реального пользователя
-        order = Order.objects.create(customer=customer, status="draft", subtotal=0, tax=0, shipping_cost=0, total=0)
+                order = Order.objects.create(
+                    customer=customer,
+                    status="draft",
+                    subtotal=0,
+                    tax=0,
+                    shipping_cost=0,
+                    total=0
+                )
 
-        subtotal = 0
-        for pid, item in cart.items():
-            line_total = item["price"] * item["quantity"]
-            subtotal += line_total
-            OrderItem.objects.create(
-                order=order,
-                product_id=int(pid),
-                unit_price=item["price"],
-                quantity=item["quantity"],
-                discount=0,
-                line_total=line_total
-            )
+                subtotal = 0
+                for pid, item in cart.items():
+                    line_total = item["price"] * item["quantity"]
+                    subtotal += line_total
 
-        order.subtotal = subtotal
-        order.total = subtotal  # Можно добавить налог и доставку позже
-        order.save()
+                    OrderItem.objects.create(
+                        order=order,
+                        product_id=int(pid),
+                        unit_price=item["price"],
+                        quantity=item["quantity"],
+                        discount=0,
+                        line_total=line_total
+                    )
 
-        # Очистим корзину
-        request.session["cart"] = {}
+                order.subtotal = subtotal
+                order.total = subtotal
+                order.status = "paid"  # или "processing"
+                order.save()
 
-        return redirect("checkout_success")
+                # Успешно — очищаем корзину
+                request.session["cart"] = {}
+
+            messages.success(request, "✅ Заказ успешно оформлен.")
+            return redirect("checkout_success")
+
+        except IntegrityError:
+            messages.error(request, "Ошибка при сохранении заказа. Изменения отменены.")
+            return redirect("cart")
+
+        except Exception as e:
+            messages.error(request, f"Непредвиденная ошибка: {e}")
+            return redirect("cart")
 
 
 class CheckoutSuccessView(View):
@@ -513,53 +532,57 @@ def export_products_csv(request):
 
 @user_passes_test(is_admin_or_manager)
 def import_products_csv(request):
-    """Импорт товаров из CSV"""
+    """Импорт товаров из CSV с атомарностью"""
     if request.method == 'POST' and request.FILES.get('csv_file'):
         csv_file = request.FILES['csv_file']
         decoded_file = csv_file.read().decode('cp1251').splitlines()
         reader = csv.DictReader(decoded_file, delimiter=';')
 
         imported = 0
-        for row in reader:
-            name = (row.get('Название') or '').strip()
-            if not name:
-                continue  # пропускаем пустые строки
+        try:
+            with transaction.atomic():
+                for row in reader:
+                    name = (row.get('Название') or '').strip()
+                    if not name:
+                        continue
 
-            description = (row.get('Описание') or '').strip()
-            price_str = (row.get('Цена') or '0').strip().replace(',', '.')
-            try:
-                base_price = float(price_str)
-            except ValueError:
-                base_price = 0.0
+                    description = (row.get('Описание') or '').strip()
+                    price_str = (row.get('Цена') or '0').strip().replace(',', '.')
+                    try:
+                        base_price = float(price_str)
+                    except ValueError:
+                        raise ValueError(f"Неверный формат цены: {price_str}")
 
-            # SKU — если не указан, создаём автоматически
-            sku = row.get('ID') or f"SKU_{name[:5].upper()}_{imported+1}"
+                    sku = row.get('ID') or f"SKU_{name[:5].upper()}_{imported+1}"
 
-            product, created = Product.objects.get_or_create(sku=sku, defaults={
-                'name': name,
-                'description': description,
-                'base_price': base_price,
-            })
+                    product, created = Product.objects.get_or_create(sku=sku, defaults={
+                        'name': name,
+                        'description': description,
+                        'base_price': base_price,
+                    })
 
-            if not created:
-                product.name = name
-                product.description = description
-                product.base_price = base_price
-                product.save()
+                    if not created:
+                        product.name = name
+                        product.description = description
+                        product.base_price = base_price
+                        product.save()
 
-            # Категории
-            cat_names = (row.get('Категории') or '').split(',')
-            product.categories.clear()
-            for cname in cat_names:
-                cname = cname.strip()
-                if cname:
-                    cat, _ = Category.objects.get_or_create(name=cname)
-                    product.categories.add(cat)
+                    cat_names = (row.get('Категории') or '').split(',')
+                    product.categories.clear()
+                    for cname in cat_names:
+                        cname = cname.strip()
+                        if cname:
+                            cat, _ = Category.objects.get_or_create(name=cname)
+                            product.categories.add(cat)
 
-            imported += 1
+                    imported += 1
 
-        messages.success(request, f'✅ Импортировано {imported} товаров.')
-        return redirect('catalog')
+            messages.success(request, f'✅ Импортировано {imported} товаров.')
+            return redirect('catalog')
+
+        except Exception as e:
+            messages.error(request, f'❌ Ошибка при импорте. Изменения отменены: {e}')
+            return redirect('catalog')
 
     messages.error(request, '❌ Файл не выбран или имеет неверный формат.')
     return redirect('catalog')

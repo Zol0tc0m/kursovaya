@@ -2,6 +2,82 @@
 {% block title %}Профиль покупателя{% endblock %}
 
 {% block content %}
+<style>
+/* 🌙 Поддержка тёмной темы */
+[data-theme="dark"] body {
+    background-color: #121212;
+    color: #f5f5f5;
+}
+
+[data-theme="dark"] h1, 
+[data-theme="dark"] h2, 
+[data-theme="dark"] h3, 
+[data-theme="dark"] h4, 
+[data-theme="dark"] h5, 
+[data-theme="dark"] h6, 
+[data-theme="dark"] p,
+[data-theme="dark"] label,
+[data-theme="dark"] span,
+[data-theme="dark"] strong,
+[data-theme="dark"] a {
+    color: #f5f5f5 !important;
+}
+
+[data-theme="dark"] .card {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+}
+
+[data-theme="dark"] .card-header {
+    background-color: #2a2a2a;
+    color: #ffffff;
+    border-bottom: 1px solid #444;
+}
+
+[data-theme="dark"] .card-body {
+    color: #f5f5f5;
+}
+
+[data-theme="dark"] .form-control {
+    background-color: #2b2b2b;
+    color: #f5f5f5;
+    border: 1px solid #555;
+}
+
+[data-theme="dark"] .form-control::placeholder {
+    color: #aaa;
+}
+
+[data-theme="dark"] .form-control:focus {
+    background-color: #333;
+    border-color: #777;
+    color: #fff;
+}
+
+[data-theme="dark"] .text-muted {
+    color: #bbb !important;
+}
+
+[data-theme="dark"] .btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+[data-theme="dark"] .btn-outline-primary {
+    color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+[data-theme="dark"] .btn-outline-primary:hover {
+    background-color: #0d6efd;
+    color: #fff;
+}
+
+[data-theme="dark"] .badge.bg-primary {
+    background-color: #0d6efd !important;
+}
+</style>
+
 <div class="row">
     <div class="col-md-8 mx-auto">
         <h2 class="mb-4">Профиль покупателя</h2>
@@ -85,7 +161,9 @@
                                 <div class="card-body">
                                     <h6 class="card-title">
                                         {{ address.get_type_display }}
-                                        {% if address.is_default %}<span class="badge bg-primary">По умолчанию</span>{% endif %}
+                                        {% if address.is_default %}
+                                            <span class="badge bg-primary">По умолчанию</span>
+                                        {% endif %}
                                     </h6>
                                     <p class="card-text mb-1">{{ address.line1 }}</p>
                                     <p class="card-text mb-1">{{ address.city }}</p>
