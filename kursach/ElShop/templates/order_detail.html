@@ -2,30 +2,66 @@
 {% block title %}Заказ #{{ order.id }}{% endblock %}
 
 {% block content %}
-<h2>Заказ #{{ order.id }}</h2>
-<p>Дата: {{ order.created_at|date:"d.m.Y H:i" }}</p>
-<p>Статус: {{ order.get_status_display }}</p>
-<p>Сумма: {{ order.total|floatformat:2 }} ₽</p>
+<h2 class="mb-3">Заказ #{{ order.id }}</h2>
 
-<h4 class="mt-4">Товары:</h4>
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>Название</th>
-            <th>Цена</th>
-            <th>Количество</th>
-            <th>Сумма</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in items %}
-        <tr>
-            <td>{{ item.product.name }}</td>
-            <td>{{ item.unit_price|floatformat:2 }} ₽</td>
-            <td>{{ item.quantity }}</td>
-            <td>{{ item.line_total|floatformat:2 }} ₽</td>
-        </tr>
-        {% endfor %}
-    </tbody>
+<p class="text-muted mb-4">
+  Дата: {{ order.created_at|date:"d.m.Y H:i" }} • Статус: {{ order.get_status_display }}
+</p>
+
+<!-- Адрес доставки -->
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="mb-0">Адрес доставки</h5>
+  </div>
+  <div class="card-body">
+    {% if order.shipping_address %}
+      <p class="mb-1">{{ order.shipping_address.line1 }}</p>
+      <p class="mb-1">{{ order.shipping_address.city }}</p>
+      <p class="mb-0">{{ order.shipping_address.country }}</p>
+    {% else %}
+      <p class="text-muted mb-0">Адрес доставки не указан.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Состав заказа -->
+<table class="table table-bordered align-middle">
+  <thead class="table-light">
+    <tr>
+      <th>Товар</th>
+      <th class="text-end">Цена</th>
+      <th class="text-end">Кол-во</th>
+      <th class="text-end">Сумма</th>
+      <th class="text-center">Способ оплаты</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in items %}
+    <tr>
+      <td>{{ it.product.name }}</td>
+      <td class="text-end">{{ it.unit_price }}</td>
+      <td class="text-end">{{ it.quantity }}</td>
+      <td class="text-end">{{ it.line_total }}</td>
+      {% if forloop.first %}
+        <td class="text-center align-middle" rowspan="{{ items|length }}">
+          {% with payment=order.payments.first %}
+            {% if payment %}
+              {{ payment.get_method_display }}
+            {% else %}
+              <span class="text-muted">Не указан</span>
+            {% endif %}
+          {% endwith %}
+        </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="3" class="text-end fw-bold">Итого</td>
+      <td class="text-end fw-bold">{{ order.total }} {{ order.currency }}</td>
+      <td></td>
+    </tr>
+  </tbody>
 </table>
+
+<a href="{% url 'order_history' %}" class="btn btn-secondary mt-3">Назад к истории заказов</a>
 {% endblock %}

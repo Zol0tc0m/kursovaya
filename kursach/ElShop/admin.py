@@ -60,7 +60,7 @@ class ProductAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            "fields": ("name", "sku", "description", "base_price", "weight_kg", "active", "categories")
+            "fields": ("name", "sku", "description", "base_price", "active", "categories")
         }),
         ("Изображение", {
             "fields": ("image", "image_preview")

@@ -23,10 +23,11 @@ from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 import csv
-from django.http import JsonResponse
 
+
+# --------- DRF viewsets ---------
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
@@ -51,11 +52,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
 
+
+# --------- Каталог ---------
 class ProductListView(ListView):
     model = Product
-    template_name = "catalog.html"  # шаблон
+    template_name = "catalog.html"
     context_object_name = "products"
-    paginate_by = 12  # показывать по 12 товаров на странице
+    paginate_by = 12
 
     def get_queryset(self):
         qs = Product.objects.filter(active=True).prefetch_related("categories")
@@ -89,17 +92,27 @@ class ProductListView(ListView):
         context["max_price"] = self.request.GET.get("max_price", "")
         return context
 
+
+# --------- Корзина ---------
 class AddToCartView(LoginRequiredMixin, View):
     login_url = 'login'
 
-    @login_required(login_url='login')
-    def add_to_cart(request, product_id):
+    # поддержим и POST, и GET (на случай, если в шаблоне ссылка)
+    def post(self, request, *args, **kwargs):
+        return self._handle(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        return self._handle(request, *args, **kwargs)
+
+    def _handle(self, request, *args, **kwargs):
+        product_id = kwargs['product_id']              # <— берём из kwargs
         product = get_object_or_404(Product, id=product_id)
+
         cart = request.session.get('cart', {})
         pid = str(product.id)
         if pid in cart:
             cart[pid]['quantity'] += 1
-            cart[pid]['line_total'] = cart[pid]['price'] * cart[pid]['quantity']
+            cart[pid]['line_total'] = float(cart[pid]['price']) * cart[pid]['quantity']
         else:
             cart[pid] = {
                 'name': product.name,
@@ -108,23 +121,8 @@ class AddToCartView(LoginRequiredMixin, View):
                 'line_total': float(product.base_price),
             }
         request.session['cart'] = cart
+        request.session.modified = True
         return redirect('cart')
-
-    def post(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id)
-        cart = request.session.get("cart", {})
-
-        if str(product.id) in cart:
-            cart[str(product.id)]["quantity"] += 1
-        else:
-            cart[str(product.id)] = {
-                "name": product.name,
-                "price": float(product.base_price),
-                "quantity": 1
-            }
-
-        request.session["cart"] = cart
-        return redirect("catalog")  # возвращаемся на каталог
 
 
 @method_decorator(login_required(login_url='login'), name='dispatch')
@@ -137,14 +135,14 @@ class CartView(View):
         total = sum(item['line_total'] for item in cart.values())
         return render(request, 'cart.html', {'cart': cart, 'total': total})
 
+
 @login_required(login_url='login')
 def clear_cart(request):
     if request.method == "POST":
-        # Полностью очищаем корзину
         request.session['cart'] = {}
-        request.session.modified = True  # обязательно
-        print("Cart cleared!")  # для логов
+        request.session.modified = True
     return redirect('cart')
+
 
 @login_required(login_url='login')
 def update_cart(request):
@@ -166,14 +164,29 @@ def update_cart(request):
     return redirect('cart')
 
 
+# --------- Checkout (адрес + способ оплаты, сохранение адреса у пользователя) ---------
 class CheckoutView(LoginRequiredMixin, View):
     login_url = 'login'
     template_name = "checkout.html"
 
+    def _norm(self, s: str) -> str:
+        return (s or "").strip().lower()
+
     def get(self, request):
         cart = request.session.get("cart", {})
         total = sum(item["price"] * item["quantity"] for item in cart.values())
-        return render(request, self.template_name, {"cart": cart, "total": total})
+        method_choices = getattr(Payment, "METHOD_CHOICES", (
+            ("card", "Card"),
+            ("transfer", "Transfer"),
+            ("mir", "MIR"),
+            ("cash", "Cash"),
+        ))
+        return render(request, self.template_name, {
+            "cart": cart,
+            "total": total,
+            "method_choices": method_choices,
+            "posted": {},
+        })
 
     def post(self, request):
         cart = request.session.get("cart", {})
@@ -181,24 +194,68 @@ class CheckoutView(LoginRequiredMixin, View):
             messages.error(request, "Корзина пуста.")
             return redirect("catalog")
 
+        # адрес и оплата из формы (ТОЛЬКО адрес, город, страна)
+        line1 = (request.POST.get("line1") or "").strip()
+        city = (request.POST.get("city") or "").strip()
+        country = (request.POST.get("country") or "").strip()
+        payment_method = (request.POST.get("payment_method") or "card").strip()
+
+        required_missing = [name for name, val in [
+            ("Адрес, строка 1", line1),
+            ("Город", city),
+            ("Страна", country),
+        ] if not val]
+        if required_missing:
+            messages.error(request, "Заполните поля: " + ", ".join(required_missing))
+            method_choices = getattr(Payment, "METHOD_CHOICES", (
+                ("card", "Card"),
+                ("transfer", "Transfer"),
+                ("mir", "MIR"),
+                ("cash", "Cash"),
+            ))
+            total = sum(item["price"] * item["quantity"] for item in cart.values())
+            return render(request, self.template_name, {
+                "cart": cart,
+                "total": total,
+                "method_choices": method_choices,
+                "posted": request.POST,
+            })
+
         try:
-            with transaction.atomic():  # 👈 атомарный блок
+            with transaction.atomic():
                 customer = request.user.customer
 
+                # upsert адреса у пользователя (без второй строки и штата)
+                existing = Address.objects.filter(
+                    customer=customer,
+                    line1__iexact=line1,
+                    city__iexact=city,
+                    country__iexact=country,
+                ).first()
+
+                if existing:
+                    address = existing
+                else:
+                    address = Address.objects.create(
+                        customer=customer,
+                        line1=line1,
+                        city=city,
+                        country=country,
+                        is_default=False,
+                    )
+
+                # создаём заказ
                 order = Order.objects.create(
                     customer=customer,
+                    shipping_address=address,
                     status="draft",
-                    subtotal=0,
-                    tax=0,
-                    shipping_cost=0,
-                    total=0
+                    subtotal=0, tax=0, shipping_cost=0, total=0
                 )
 
                 subtotal = 0
                 for pid, item in cart.items():
                     line_total = item["price"] * item["quantity"]
                     subtotal += line_total
-
                     OrderItem.objects.create(
                         order=order,
                         product_id=int(pid),
@@ -213,8 +270,16 @@ class CheckoutView(LoginRequiredMixin, View):
                 order.status = "paid"  # или "processing"
                 order.save()
 
-                # Успешно — очищаем корзину
+                # платёж по выбранному способу
+                Payment.objects.create(
+                    order=order,
+                    method=payment_method,
+                    amount=subtotal,
+                )
+
+                # очистка корзины
                 request.session["cart"] = {}
+                request.session.modified = True
 
             messages.success(request, "✅ Заказ успешно оформлен.")
             return redirect("checkout_success")
@@ -222,7 +287,6 @@ class CheckoutView(LoginRequiredMixin, View):
         except IntegrityError:
             messages.error(request, "Ошибка при сохранении заказа. Изменения отменены.")
             return redirect("cart")
-
         except Exception as e:
             messages.error(request, f"Непредвиденная ошибка: {e}")
             return redirect("cart")
@@ -233,12 +297,16 @@ class CheckoutSuccessView(View):
 
     def get(self, request):
         return render(request, self.template_name)
-    
+
+
+# --------- Товар ---------
 class ProductDetailView(DetailView):
     model = Product
     template_name = 'product_detail.html'
     context_object_name = 'product'
 
+
+# --------- Регистрация ---------
 class RegisterForm(forms.ModelForm):
     password = forms.CharField(widget=forms.PasswordInput, label="Пароль")
     confirm_password = forms.CharField(widget=forms.PasswordInput, label="Подтвердите пароль")
@@ -275,16 +343,14 @@ def register(request):
         form = RegisterForm()
     return render(request, 'auth/register.html', {'form': form})
 
+
+# --------- История заказов ---------
 @method_decorator(login_required(login_url='login'), name='dispatch')
 class OrderHistoryView(View):
     def get(self, request):
-        """
-        Показываем все заказы текущего пользователя
-        """
         try:
-            customer = request.user.customer  # OneToOneField в Customer
+            customer = request.user.customer
         except AttributeError:
-            # На случай, если Customer ещё не создан
             customer = None
 
         orders = Order.objects.filter(customer=customer) if customer else []
@@ -294,22 +360,22 @@ class OrderHistoryView(View):
 @method_decorator(login_required(login_url='login'), name='dispatch')
 class OrderDetailView(View):
     def get(self, request, order_id):
-        """
-        Подробности конкретного заказа
-        """
         try:
             customer = request.user.customer
         except AttributeError:
-            return redirect('catalog')  # если Customer нет, перенаправляем
+            return redirect('catalog')
 
         order = get_object_or_404(Order, id=order_id, customer=customer)
         items = order.items.all()
         return render(request, 'order_detail.html', {'order': order, 'items': items})
-    
+
+
+# --------- Формы профиля (без AddressForm на добавление адреса) ---------
 class CustomerForm(forms.ModelForm):
     class Meta:
         model = Customer
         fields = ['first_name', 'last_name', 'phone', 'email']
+
 
 class CustomerProfileForm(forms.ModelForm):
     class Meta:
@@ -319,11 +385,8 @@ class CustomerProfileForm(forms.ModelForm):
             'date_of_birth': forms.DateInput(attrs={'type': 'date'}),
         }
 
-class AddressForm(forms.ModelForm):
-    class Meta:
-        model = Address
-        fields = ['type', 'line1', 'city', 'country', 'is_default']
 
+# --------- Профиль: только чтение адресов, сохранённых из заказов ---------
 @method_decorator(login_required(login_url='login'), name='dispatch')
 class ProfileView(View):
     template_name = 'profile.html'
@@ -331,22 +394,19 @@ class ProfileView(View):
     def get(self, request):
         try:
             customer = request.user.customer
-            profile, created = CustomerProfile.objects.get_or_create(customer=customer)
-            addresses = customer.addresses.all()
         except ObjectDoesNotExist:
-            # Если у пользователя нет Customer, создаем его
             customer = Customer.objects.create(
                 user=request.user,
                 email=request.user.email,
                 first_name='',
                 last_name=''
             )
-            profile, created = CustomerProfile.objects.get_or_create(customer=customer)
-            addresses = []
+        profile, _ = CustomerProfile.objects.get_or_create(customer=customer)
+
+        addresses = customer.addresses.all().order_by('-is_default', '-id')
         
         customer_form = CustomerForm(instance=customer)
         profile_form = CustomerProfileForm(instance=profile)
-        address_form = AddressForm()
         
         context = {
             'customer': customer,
@@ -354,14 +414,12 @@ class ProfileView(View):
             'addresses': addresses,
             'customer_form': customer_form,
             'profile_form': profile_form,
-            'address_form': address_form,
         }
         return render(request, self.template_name, context)
     
     def post(self, request):
         try:
             customer = request.user.customer
-            profile, created = CustomerProfile.objects.get_or_create(customer=customer)
         except ObjectDoesNotExist:
             customer = Customer.objects.create(
                 user=request.user,
@@ -369,9 +427,8 @@ class ProfileView(View):
                 first_name='',
                 last_name=''
             )
-            profile, created = CustomerProfile.objects.get_or_create(customer=customer)
+        profile, _ = CustomerProfile.objects.get_or_create(customer=customer)
         
-        # Обработка обновления основной информации
         if 'update_customer' in request.POST:
             customer_form = CustomerForm(request.POST, instance=customer)
             if customer_form.is_valid():
@@ -379,37 +436,16 @@ class ProfileView(View):
                 messages.success(request, 'Основная информация обновлена')
                 return redirect('profile')
         
-        # Обработка обновления профиля
         elif 'update_profile' in request.POST:
             profile_form = CustomerProfileForm(request.POST, instance=profile)
             if profile_form.is_valid():
                 profile_form.save()
-                messages.success(request, 'Профиль обновлен')
+                messages.success(request, 'Профиль обновлён')
                 return redirect('profile')
         
-        # Обработка добавления адреса
-        elif 'add_address' in request.POST:
-            address_form = AddressForm(request.POST)
-            if address_form.is_valid():
-                address = address_form.save(commit=False)
-                address.customer = customer
-                
-                # Если адрес помечен как default, снимаем default с других адресов того же типа
-                if address.is_default:
-                    Address.objects.filter(
-                        customer=customer, 
-                        type=address.type
-                    ).update(is_default=False)
-                
-                address.save()
-                messages.success(request, 'Адрес добавлен')
-                return redirect('profile')
-        
-        # Если формы не валидны, показываем с ошибками
-        addresses = customer.addresses.all()
+        addresses = customer.addresses.all().order_by('-is_default', '-id')
         customer_form = CustomerForm(instance=customer)
         profile_form = CustomerProfileForm(instance=profile)
-        address_form = AddressForm()
         
         context = {
             'customer': customer,
@@ -417,21 +453,21 @@ class ProfileView(View):
             'addresses': addresses,
             'customer_form': customer_form,
             'profile_form': profile_form,
-            'address_form': address_form,
         }
         return render(request, self.template_name, context)
-    
-    # Функция проверки прав доступа
+
+
+# --------- Аналитика ---------
 def admin_or_manager(user):
     return user.is_staff or user.groups.filter(name="Manager").exists()
 
+
 @login_required(login_url='login')
-@user_passes_test(admin_or_manager, login_url='catalog')  # если нет доступа — редирект в каталог
+@user_passes_test(admin_or_manager, login_url='catalog')
 def analytics_view(request):
     today = timezone.now().date()
-    last_week = today - timedelta(days=6)  # последние 7 дней включая сегодня
+    last_week = today - timedelta(days=6)
 
-    # --- Гистограмма продаж по категориям ---
     category_sales = (
         OrderItem.objects
         .filter(order__status__in=['paid', 'shipped', 'completed'])
@@ -440,7 +476,6 @@ def analytics_view(request):
         .order_by('-total_sold')
     )
 
-    # --- Линейный график дохода за последнюю неделю ---
     daily_revenue = (
         Order.objects
         .filter(created_at__date__gte=last_week, status__in=['paid', 'shipped', 'completed'])
@@ -450,7 +485,6 @@ def analytics_view(request):
         .order_by('day')
     )
 
-    # --- Круговая диаграмма топ-5 товаров ---
     top_products = (
         OrderItem.objects
         .filter(order__status__in=['paid', 'shipped', 'completed'])
@@ -466,6 +500,7 @@ def analytics_view(request):
     }
     return render(request, 'analytics.html', context)
 
+
 @staff_member_required
 def export_analytics_csv(request):
     start_date = request.GET.get('start_date')
@@ -477,13 +512,10 @@ def export_analytics_csv(request):
     if end_date:
         orders = orders.filter(created_at__date__lte=end_date)
 
-    # Excel-friendly CSV (cp1251)
     response = HttpResponse(content_type='text/csv; charset=cp1251')
     response['Content-Disposition'] = 'attachment; filename="analytics_report.csv"'
 
     writer = csv.writer(response, delimiter=';', quoting=csv.QUOTE_MINIMAL)
-
-    # Заголовки (на русском)
     writer.writerow([
         "Дата заказа", "ID заказа", "Статус", "Покупатель",
         "Сумма заказа", "Товар", "Количество", "Цена за единицу", "Сумма по товару"
@@ -505,12 +537,13 @@ def export_analytics_csv(request):
 
     return response
 
+
 def is_admin_or_manager(user):
     return user.is_staff or user.groups.filter(name='Manager').exists()
 
+
 @user_passes_test(is_admin_or_manager)
 def export_products_csv(request):
-    """Экспорт всех товаров в CSV"""
     response = HttpResponse(content_type='text/csv; charset=cp1251')
     response['Content-Disposition'] = 'attachment; filename="products_export.csv"'
 
@@ -532,7 +565,6 @@ def export_products_csv(request):
 
 @user_passes_test(is_admin_or_manager)
 def import_products_csv(request):
-    """Импорт товаров из CSV с атомарностью"""
     if request.method == 'POST' and request.FILES.get('csv_file'):
         csv_file = request.FILES['csv_file']
         decoded_file = csv_file.read().decode('cp1251').splitlines()
@@ -586,6 +618,7 @@ def import_products_csv(request):
 
     messages.error(request, '❌ Файл не выбран или имеет неверный формат.')
     return redirect('catalog')
+
 
 @login_required
 def toggle_theme(request):

@@ -4,39 +4,84 @@
 {% block content %}
 <h2 class="mb-4">Оформление заказа</h2>
 
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} mb-3">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
 {% if cart %}
 <table class="table table-bordered">
-    <thead>
-        <tr>
-            <th>Название</th>
-            <th>Цена</th>
-            <th>Количество</th>
-            <th>Сумма</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for pid, item in cart.items %}
-        <tr>
-            <td>{{ item.name }}</td>
-            <td>{{ item.price|floatformat:2 }} ₽</td>
-            <td>{{ item.quantity }}</td>
-            <td>{{ item.line_total|floatformat:2 }} ₽</td>
-        </tr>
-        {% endfor %}
-        <tr>
-            <td colspan="3" class="text-end fw-bold">Итого:</td>
-            <td class="fw-bold">{{ total|floatformat:2 }} ₽</td>
-        </tr>
-    </tbody>
+  <thead>
+    <tr>
+      <th>Название</th>
+      <th>Цена</th>
+      <th>Количество</th>
+      <th>Сумма</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for pid, item in cart.items %}
+    <tr>
+      <td>{{ item.name }}</td>
+      <td>{{ item.price|floatformat:2 }} ₽</td>
+      <td>{{ item.quantity }}</td>
+      <td>{{ item.line_total|floatformat:2 }} ₽</td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="3" class="text-end fw-bold">Итого:</td>
+      <td class="fw-bold">{{ total|floatformat:2 }} ₽</td>
+    </tr>
+  </tbody>
 </table>
 
-<form method="post">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-success">Подтвердить заказ</button>
-    <a href="{% url 'cart' %}" class="btn btn-secondary ms-2">Вернуться в корзину</a>
+<form method="post" class="mt-4">
+  {% csrf_token %}
+
+  <!-- Адрес доставки -->
+  <fieldset class="mb-4">
+    <legend class="h5 mb-3">Адрес доставки</legend>
+
+    <div class="mb-3">
+      <label for="line1" class="form-label">Адрес доставки</label>
+      <input type="text" class="form-control" id="line1" name="line1"
+             value="{{ posted.line1|default:'' }}" required maxlength="255"
+             placeholder="ул. Пример, д. 1, кв. 1">
+    </div>
+
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label for="city" class="form-label">Город</label>
+        <input type="text" class="form-control" id="city" name="city"
+               value="{{ posted.city|default:'' }}" required maxlength="100">
+    </div>
+
+    <div class="mb-3">
+      <label for="country" class="form-label">Страна</label>
+      <input type="text" class="form-control" id="country" name="country"
+             value="{{ posted.country|default:'Россия' }}" required maxlength="50">
+    </div>
+  </fieldset>
+
+  <!-- Способ оплаты -->
+  <fieldset class="mb-4">
+    <legend class="h5 mb-3">Способ оплаты</legend>
+    <select class="form-select" id="payment_method" name="payment_method" required>
+      {% for code, label in method_choices %}
+        <option value="{{ code }}" {% if posted.payment_method|default:'' == code %}selected{% endif %}>
+          {{ label }}
+        </option>
+      {% endfor %}
+    </select>
+  </fieldset>
+
+  <button type="submit" class="btn btn-success">Подтвердить заказ</button>
+  <a href="{% url 'cart' %}" class="btn btn-secondary ms-2">Вернуться в корзину</a>
 </form>
+
 {% else %}
-<p>Корзина пуста.</p>
-<a href="{% url 'catalog' %}" class="btn btn-primary">Вернуться в каталог</a>
+  <p>Корзина пуста.</p>
+  <a href="{% url 'catalog' %}" class="btn btn-primary">Вернуться в каталог</a>
 {% endif %}
 {% endblock %}

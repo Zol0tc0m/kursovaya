@@ -1,241 +1,102 @@
 {% extends "base.html" %}
-{% block title %}Профиль покупателя{% endblock %}
+{% block title %}Профиль{% endblock %}
 
 {% block content %}
-<style>
-/* 🌙 Поддержка тёмной темы */
-[data-theme="dark"] body {
-    background-color: #121212;
-    color: #f5f5f5;
-}
+<h2 class="mb-4">Профиль</h2>
 
-[data-theme="dark"] h1, 
-[data-theme="dark"] h2, 
-[data-theme="dark"] h3, 
-[data-theme="dark"] h4, 
-[data-theme="dark"] h5, 
-[data-theme="dark"] h6, 
-[data-theme="dark"] p,
-[data-theme="dark"] label,
-[data-theme="dark"] span,
-[data-theme="dark"] strong,
-[data-theme="dark"] a {
-    color: #f5f5f5 !important;
-}
-
-[data-theme="dark"] .card {
-    background-color: #1e1e1e;
-    border: 1px solid #333;
-}
-
-[data-theme="dark"] .card-header {
-    background-color: #2a2a2a;
-    color: #ffffff;
-    border-bottom: 1px solid #444;
-}
-
-[data-theme="dark"] .card-body {
-    color: #f5f5f5;
-}
-
-[data-theme="dark"] .form-control {
-    background-color: #2b2b2b;
-    color: #f5f5f5;
-    border: 1px solid #555;
-}
-
-[data-theme="dark"] .form-control::placeholder {
-    color: #aaa;
-}
-
-[data-theme="dark"] .form-control:focus {
-    background-color: #333;
-    border-color: #777;
-    color: #fff;
-}
-
-[data-theme="dark"] .text-muted {
-    color: #bbb !important;
-}
-
-[data-theme="dark"] .btn-primary {
-    background-color: #0d6efd;
-    border-color: #0d6efd;
-}
-
-[data-theme="dark"] .btn-outline-primary {
-    color: #0d6efd;
-    border-color: #0d6efd;
-}
-
-[data-theme="dark"] .btn-outline-primary:hover {
-    background-color: #0d6efd;
-    color: #fff;
-}
-
-[data-theme="dark"] .badge.bg-primary {
-    background-color: #0d6efd !important;
-}
-</style>
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} mb-3">{{ message }}</div>
+  {% endfor %}
+{% endif %}
 
 <div class="row">
-    <div class="col-md-8 mx-auto">
-        <h2 class="mb-4">Профиль покупателя</h2>
+  <!-- Основная информация -->
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="mb-0">Основная информация</h5></div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          {{ customer_form.non_field_errors }}
+          <div class="mb-3">
+            <label class="form-label">Имя</label>
+            {{ customer_form.first_name }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Фамилия</label>
+            {{ customer_form.last_name }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Телефон</label>
+            {{ customer_form.phone }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            {{ customer_form.email }}
+          </div>
+          <button type="submit" name="update_customer" class="btn btn-primary">Сохранить</button>
+        </form>
+      </div>
+    </div>
+  </div>
 
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
+  <!-- Профиль -->
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="mb-0">Доп. информация</h5></div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          {{ profile_form.non_field_errors }}
+          <div class="mb-3">
+            <label class="form-label">Дата рождения</label>
+            {{ profile_form.date_of_birth }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Пол</label>
+            {{ profile_form.gender }}
+          </div>
+          <button type="submit" name="update_profile" class="btn btn-primary">Сохранить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 
-        <!-- Основная информация -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">Основная информация</h5>
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    {% csrf_token %}
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Имя</label>
-                            {{ customer_form.first_name }}
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Фамилия</label>
-                            {{ customer_form.last_name }}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Email</label>
-                            {{ customer_form.email }}
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Телефон</label>
-                            {{ customer_form.phone }}
-                        </div>
-                    </div>
-                    <button type="submit" name="update_customer" class="btn btn-primary">Обновить информацию</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Дополнительная информация -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">Дополнительная информация</h5>
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    {% csrf_token %}
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Дата рождения</label>
-                            {{ profile_form.date_of_birth }}
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Пол</label>
-                            {{ profile_form.gender }}
-                        </div>
-                    </div>
-                    <button type="submit" name="update_profile" class="btn btn-primary">Обновить профиль</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Адреса -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Мои адреса</h5>
-            </div>
-            <div class="card-body">
-                {% if addresses %}
-                    <div class="row">
-                        {% for address in addresses %}
-                        <div class="col-md-6 mb-3">
-                            <div class="card {% if address.is_default %}border-primary{% endif %}">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        {{ address.get_type_display }}
-                                        {% if address.is_default %}
-                                            <span class="badge bg-primary">По умолчанию</span>
-                                        {% endif %}
-                                    </h6>
-                                    <p class="card-text mb-1">{{ address.line1 }}</p>
-                                    <p class="card-text mb-1">{{ address.city }}</p>
-                                    <p class="card-text">{{ address.country }}</p>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-muted">Адреса не добавлены</p>
+<!-- Адреса из заказов (только просмотр) -->
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Мои адреса (сохранены при оформлении заказов)</h5>
+  </div>
+  <div class="card-body">
+    {% if addresses %}
+      <div class="row">
+        {% for address in addresses %}
+          <div class="col-md-6 mb-3">
+            <div class="card {% if address.is_default %}border-primary{% endif %}">
+              <div class="card-body">
+                {% if address.is_default %}
+                  <span class="badge bg-primary float-end">По умолчанию</span>
                 {% endif %}
 
-                <button class="btn btn-outline-primary mt-3" data-bs-toggle="collapse" data-bs-target="#addressForm">
-                    Добавить новый адрес
-                </button>
-
-                <div class="collapse mt-3" id="addressForm">
-                    <div class="card card-body">
-                        <form method="post">
-                            {% csrf_token %}
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Тип адреса</label>
-                                    {{ address_form.type }}
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check mt-4">
-                                        {{ address_form.is_default }}
-                                        <label class="form-check-label">Использовать по умолчанию</label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Адрес</label>
-                                {{ address_form.line1 }}
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Город</label>
-                                    {{ address_form.city }}
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Страна</label>
-                                    {{ address_form.country }}
-                                </div>
-                            </div>
-                            <button type="submit" name="add_address" class="btn btn-primary">Добавить адрес</button>
-                        </form>
-                    </div>
-                </div>
+                <p class="mb-1">{{ address.line1 }}</p>
+                {% if address.line2 %}<p class="mb-1">{{ address.line2 }}</p>{% endif %}
+                <p class="mb-1">
+                  {{ address.city }}{% if address.state %}, {{ address.state }}{% endif %}
+                </p>
+                <p class="mb-1">{{ address.postal_code }}</p>
+                <p class="mb-0">{{ address.country }}</p>
+              </div>
             </div>
-        </div>
-
-        <!-- Статистика -->
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Статистика</h5>
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-md-6">
-                        <h4>{{ customer.orders.count }}</h4>
-                        <p class="text-muted">Всего заказов</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h4>{{ customer.created_at|date:"d.m.Y" }}</h4>
-                        <p class="text-muted">Дата регистрации</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted mb-0">
+        Адреса появятся после оформления заказов. Добавление адреса выполняется на этапе «Оформление заказа».
+      </p>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

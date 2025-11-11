@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.db.models import Q
 
 class Customer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="customer")
@@ -30,24 +31,25 @@ class CustomerProfile(models.Model):
 
 
 class Address(models.Model):
-    ADDRESS_TYPES = [
-        ("billing", "Billing"),
-        ("shipping", "Shipping"),
-        ("other", "Other"),
-    ]
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="addresses")
-    type = models.CharField(max_length=20, choices=ADDRESS_TYPES)
     line1 = models.CharField(max_length=255)
     line2 = models.CharField(max_length=255, blank=True, null=True)
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=100, blank=True, null=True)
-    postal_code = models.CharField(max_length=20)
     country = models.CharField(max_length=50)
     is_default = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ("customer", "type", "is_default")
         db_table = "elshop_address"
+        constraints = [
+            # Разрешаем сколько угодно адресов с is_default=False,
+            # но ровно один с is_default=True на клиента
+            models.UniqueConstraint(
+                fields=["customer"],
+                condition=Q(is_default=True),
+                name="uniq_default_address_per_customer",
+            )
+        ]
 
 
 class Supplier(models.Model):
@@ -78,7 +80,6 @@ class Product(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     base_price = models.DecimalField(max_digits=12, decimal_places=2)
-    weight_kg = models.DecimalField(max_digits=8, decimal_places=3, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     active = models.BooleanField(default=True)
     image = models.ImageField(upload_to="products/", blank=True, null=True)  # новое поле
@@ -141,7 +142,7 @@ class Order(models.Model):
     shipping_address = models.ForeignKey(Address, on_delete=models.SET_NULL, null=True, related_name="shipping_orders")
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
-    currency = models.CharField(max_length=3, default="EUR")
+    currency = models.CharField(max_length=3, default="₽")
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     shipping_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -169,8 +170,8 @@ class OrderItem(models.Model):
 class Payment(models.Model):
     METHOD_CHOICES = [
         ("card", "Card"),
-        ("bank_transfer", "Bank Transfer"),
-        ("paypal", "PayPal"),
+        ("transfer", "Transfer"),
+        ("mir", "MIR"),
         ("cash", "Cash"),
     ]
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="payments")
