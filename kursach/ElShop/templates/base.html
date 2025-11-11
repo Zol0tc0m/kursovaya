@@ -157,7 +157,7 @@
           </div>
           <div class="modal-body">
             <ul class="list-unstyled mb-0">
-              <li><kbd>Ctrl</kbd> + <kbd>S</kbd> — Сохранить форму</li>
+              <li><kbd>Ctrl</kbd> + <kbd>R</kbd> — Сохранить форму</li>
               <li><kbd>Ctrl</kbd> + <kbd>I</kbd> — Импорт данных</li>
               <li><kbd>Ctrl</kbd> + <kbd>E</kbd> — Экспорт данных</li>
               <li><kbd>Ctrl</kbd> + <kbd>F</kbd> — Панель фильтров</li>
@@ -182,13 +182,9 @@ document.addEventListener("keydown", function(e) {
     const key = e.key.toLowerCase();
 
     switch (key) {
-        case "s":
+        case "r":
             e.preventDefault();
-            const form = document.querySelector("form");
-            if (form) {
-                const btn = form.querySelector("button[type='submit']");
-                if (btn) btn.click();
-            }
+            location.reload();
             break;
 
         case "i":
