@@ -182,7 +182,7 @@
                             {{ product.name }}
                         </a>
                     </h5>
-                    <p class="card-text fw-bold text-success">{{ product.base_price|floatformat:2 }} €</p>
+                    <p class="card-text fw-bold text-success">{{ product.base_price|floatformat:2 }} ₽</p>
                     <form method="post" action="{% url 'add_to_cart' product.id %}">
                         {% csrf_token %}
                         <button class="btn btn-primary w-100">Добавить в корзину</button>

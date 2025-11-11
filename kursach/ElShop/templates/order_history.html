@@ -21,7 +21,7 @@
             <td>{{ order.id }}</td>
             <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
             <td>{{ order.get_status_display }}</td>
-            <td>{{ order.total|floatformat:2 }} €</td>
+            <td>{{ order.total|floatformat:2 }} ₽</td>
             <td><a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-primary">Посмотреть</a></td>
         </tr>
         {% endfor %}

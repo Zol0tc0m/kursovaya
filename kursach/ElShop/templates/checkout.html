@@ -18,14 +18,14 @@
         {% for pid, item in cart.items %}
         <tr>
             <td>{{ item.name }}</td>
-            <td>{{ item.price|floatformat:2 }} €</td>
+            <td>{{ item.price|floatformat:2 }} ₽</td>
             <td>{{ item.quantity }}</td>
-            <td>{{ item.line_total|floatformat:2 }} €</td>
+            <td>{{ item.line_total|floatformat:2 }} ₽</td>
         </tr>
         {% endfor %}
         <tr>
             <td colspan="3" class="text-end fw-bold">Итого:</td>
-            <td class="fw-bold">{{ total|floatformat:2 }} €</td>
+            <td class="fw-bold">{{ total|floatformat:2 }} ₽</td>
         </tr>
     </tbody>
 </table>

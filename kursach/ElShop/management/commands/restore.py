@@ -1,4 +1,3 @@
-# myapp/management/commands/restore_pg.py
 import os, subprocess
 from django.core.management.base import BaseCommand
 from django.conf import settings
