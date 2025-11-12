@@ -1,8 +1,9 @@
 from django.shortcuts import redirect, render, get_object_or_404
 from rest_framework import viewsets
 from django.views import View
+from decimal import Decimal
 from django.views.generic import ListView, DetailView
-from .models import Customer, Product, Order, OrderItem, Payment, Category, Address, CustomerProfile, UserSettings
+from .models import Customer, Product, Order, OrderItem, Payment, Category, Address, CustomerProfile, UserSettings, Inventory
 from .serializers import (
     CustomerSerializer,
     ProductSerializer,
@@ -11,7 +12,8 @@ from .serializers import (
     PaymentSerializer,
 )
 from django import forms
-from django.db.models import Sum
+from django.db.models import Sum, F, IntegerField, DecimalField, Value
+from django.db.models.functions import Coalesce, TruncDate
 from django.db import transaction, IntegrityError
 from datetime import timedelta
 from django.contrib.auth.models import User
@@ -105,7 +107,7 @@ class AddToCartView(LoginRequiredMixin, View):
         return self._handle(request, *args, **kwargs)
 
     def _handle(self, request, *args, **kwargs):
-        product_id = kwargs['product_id']              # <— берём из kwargs
+        product_id = kwargs['product_id']
         product = get_object_or_404(Product, id=product_id)
 
         cart = request.session.get('cart', {})
@@ -164,7 +166,7 @@ def update_cart(request):
     return redirect('cart')
 
 
-# --------- Checkout (адрес + способ оплаты, сохранение адреса у пользователя) ---------
+# --------- Checkout ---------
 class CheckoutView(LoginRequiredMixin, View):
     login_url = 'login'
     template_name = "checkout.html"
@@ -194,7 +196,7 @@ class CheckoutView(LoginRequiredMixin, View):
             messages.error(request, "Корзина пуста.")
             return redirect("catalog")
 
-        # адрес и оплата из формы (ТОЛЬКО адрес, город, страна)
+        # адрес и оплата из формы
         line1 = (request.POST.get("line1") or "").strip()
         city = (request.POST.get("city") or "").strip()
         country = (request.POST.get("country") or "").strip()
@@ -225,7 +227,6 @@ class CheckoutView(LoginRequiredMixin, View):
             with transaction.atomic():
                 customer = request.user.customer
 
-                # upsert адреса у пользователя (без второй строки и штата)
                 existing = Address.objects.filter(
                     customer=customer,
                     line1__iexact=line1,
@@ -267,7 +268,7 @@ class CheckoutView(LoginRequiredMixin, View):
 
                 order.subtotal = subtotal
                 order.total = subtotal
-                order.status = "paid"  # или "processing"
+                order.status = "paid"
                 order.save()
 
                 # платёж по выбранному способу
@@ -308,6 +309,7 @@ class ProductDetailView(DetailView):
 
 # --------- Регистрация ---------
 class RegisterForm(forms.ModelForm):
+    email = forms.EmailField(label="Email", required=True)
     password = forms.CharField(widget=forms.PasswordInput, label="Пароль")
     confirm_password = forms.CharField(widget=forms.PasswordInput, label="Подтвердите пароль")
 
@@ -315,32 +317,53 @@ class RegisterForm(forms.ModelForm):
         model = User
         fields = ['username', 'email']
 
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        # Запретим дубли как среди User, так и среди Customer (на всякий случай)
+        from .models import Customer
+        if User.objects.filter(email__iexact=email).exists() or Customer.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("Пользователь с таким email уже существует")
+        return email
+
     def clean(self):
-        cleaned_data = super().clean()
-        password = cleaned_data.get('password')
-        confirm = cleaned_data.get('confirm_password')
-        if password and confirm and password != confirm:
+        cleaned = super().clean()
+        p1 = cleaned.get('password')
+        p2 = cleaned.get('confirm_password')
+        if p1 and p2 and p1 != p2:
             self.add_error('confirm_password', 'Пароли не совпадают')
-        return cleaned_data
+        return cleaned
 
 
 def register(request):
     if request.method == 'POST':
         form = RegisterForm(request.POST)
         if form.is_valid():
-            user = form.save(commit=False)
-            user.set_password(form.cleaned_data['password'])
-            user.save()
-            Customer.objects.create(
-                user=user,
-                email=user.email,
-                first_name='',
-                last_name=''
-            )
-            login(request, user)
-            return redirect('catalog')
+            try:
+                with transaction.atomic():
+                    user = User(
+                        username=form.cleaned_data['username'],
+                        email=form.cleaned_data['email'],
+                    )
+                    user.set_password(form.cleaned_data['password'])
+                    user.save()
+
+                    Customer.objects.create(
+                        user=user,
+                        email=user.email,
+                        first_name='',
+                        last_name=''
+                    )
+
+                login(request, user)
+                messages.success(request, "Аккаунт успешно создан")
+                return redirect('catalog')
+
+            except IntegrityError:
+                form.add_error('email', 'Пользователь с таким email уже существует')
+
     else:
         form = RegisterForm()
+
     return render(request, 'auth/register.html', {'form': form})
 
 
@@ -370,7 +393,7 @@ class OrderDetailView(View):
         return render(request, 'order_detail.html', {'order': order, 'items': items})
 
 
-# --------- Формы профиля (без AddressForm на добавление адреса) ---------
+# --------- Формы профиля ---------
 class CustomerForm(forms.ModelForm):
     class Meta:
         model = Customer
@@ -386,7 +409,7 @@ class CustomerProfileForm(forms.ModelForm):
         }
 
 
-# --------- Профиль: только чтение адресов, сохранённых из заказов ---------
+# --------- Профиль ---------
 @method_decorator(login_required(login_url='login'), name='dispatch')
 class ProfileView(View):
     template_name = 'profile.html'
@@ -468,38 +491,79 @@ def analytics_view(request):
     today = timezone.now().date()
     last_week = today - timedelta(days=6)
 
-    category_sales = (
+    start_date = request.GET.get('start_date') or last_week.isoformat()
+    end_date = request.GET.get('end_date') or today.isoformat()
+
+    # --- Продажи по категориям (шт.) ---
+    category_qs = (
         OrderItem.objects
         .filter(order__status__in=['paid', 'shipped', 'completed'])
         .values('product__categories__name')
-        .annotate(total_sold=Sum('quantity'))
+        .annotate(
+            total_sold=Coalesce(
+                Sum('quantity', output_field=IntegerField()),
+                Value(0, output_field=IntegerField()),
+                output_field=IntegerField(),
+            )
+        )
         .order_by('-total_sold')
     )
+    category_labels = [(r['product__categories__name'] or 'Без категории') for r in category_qs]
+    category_data = [int(r['total_sold'] or 0) for r in category_qs]
 
-    daily_revenue = (
+    # --- Доход по дням в периоде (Decimal) ---
+    daily_qs = (
         Order.objects
-        .filter(created_at__date__gte=last_week, status__in=['paid', 'shipped', 'completed'])
-        .extra({'day': "date(created_at)"})
+        .filter(
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+            status__in=['paid', 'shipped', 'completed'],
+        )
+        .annotate(day=TruncDate('created_at'))
         .values('day')
-        .annotate(total=Sum('total'))
+        .annotate(
+            total=Coalesce(
+                Sum('total', output_field=DecimalField(max_digits=12, decimal_places=2)),
+                Value(Decimal('0.00'), output_field=DecimalField(max_digits=12, decimal_places=2)),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
         .order_by('day')
     )
+    revenue_labels = [r['day'].strftime('%Y-%m-%d') for r in daily_qs]
+    revenue_data = [float(r['total'] or 0) for r in daily_qs]
 
-    top_products = (
+    # --- Топ-5 товаров (шт.) ---
+    top_qs = (
         OrderItem.objects
         .filter(order__status__in=['paid', 'shipped', 'completed'])
         .values('product__name')
-        .annotate(total_sold=Sum('quantity'))
+        .annotate(
+            total_sold=Coalesce(
+                Sum('quantity', output_field=IntegerField()),
+                Value(0, output_field=IntegerField()),
+                output_field=IntegerField(),
+            )
+        )
         .order_by('-total_sold')[:5]
     )
+    top_labels = [r['product__name'] for r in top_qs]
+    top_data = [int(r['total_sold'] or 0) for r in top_qs]
 
     context = {
-        'category_sales': list(category_sales),
-        'daily_revenue': list(daily_revenue),
-        'top_products': list(top_products),
+        'start_date': start_date,
+        'end_date': end_date,
+        'category_labels': category_labels,
+        'category_data': category_data,
+        'revenue_labels': revenue_labels,
+        'revenue_data': revenue_data,
+        'top_labels': top_labels,
+        'top_data': top_data,
+        'category_sales': list(category_qs),
+        'daily_revenue': list(daily_qs),
+        'top_products': list(top_qs),
     }
     return render(request, 'analytics.html', context)
-
 
 @staff_member_required
 def export_analytics_csv(request):

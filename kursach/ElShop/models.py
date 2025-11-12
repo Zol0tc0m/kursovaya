@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.db.models import Q
+from django.db.models import Q, Sum, F
+from django.core.exceptions import ValidationError
 
 class Customer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="customer")
@@ -42,8 +43,6 @@ class Address(models.Model):
     class Meta:
         db_table = "elshop_address"
         constraints = [
-            # Разрешаем сколько угодно адресов с is_default=False,
-            # но ровно один с is_default=True на клиента
             models.UniqueConstraint(
                 fields=["customer"],
                 condition=Q(is_default=True),
@@ -82,9 +81,19 @@ class Product(models.Model):
     base_price = models.DecimalField(max_digits=12, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     active = models.BooleanField(default=True)
-    image = models.ImageField(upload_to="products/", blank=True, null=True)  # новое поле
+    image = models.ImageField(upload_to="products/", blank=True, null=True)
     categories = models.ManyToManyField(Category, related_name="products", blank=True)
     suppliers = models.ManyToManyField(Supplier, through="ProductSupplier", related_name="products")
+
+    def clean(self):
+        """Проверка на отрицательную цену"""
+        if self.base_price is not None and self.base_price < 0:
+            raise ValidationError({'base_price': "Цена не может быть отрицательной"})
+
+    def save(self, *args, **kwargs):
+        # Запуск валидации перед сохранением
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
